@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: llm-integration-service-test
+  
+server:
+  port: 0  # Random port for testing
+
+# Test LLM Provider Configurations
+llm:
+  providers:
+    openai:
+      enabled: false
+      base-url: "https://api.openai.com/v1"
+      api-key: "test-key"
+      default-model: "gpt-3.5-turbo"
+      timeout: 5000
+      
+    ollama:
+      enabled: false
+      base-url: "http://localhost:11434/v1"
+      api-key: "ollama"
+      default-model: "llama2"
+      timeout: 5000
+
+  default-provider: "openai"
+  max-tokens: 100
+  temperature: 0.5
+  stream: false
+
+# Disable actuator endpoints for tests
+management:
+  endpoints:
+    enabled-by-default: false
+
+# Test logging
+logging:
+  level:
+    com.example.llm: DEBUG
+    org.springframework.web: WARN

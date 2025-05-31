@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html ng-app="llmApp">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LLM Integration Chat Interface</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- AngularJS -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <style>
+        .chat-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            margin-left: 20%;
+            text-align: right;
+        }
+        
+        .assistant-message {
+            background-color: #e9ecef;
+            color: #333;
+            margin-right: 20%;
+        }
+        
+        .system-message {
+            background-color: #ffc107;
+            color: #333;
+            font-style: italic;
+        }
+        
+        .provider-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-up {
+            background-color: #28a745;
+        }
+        
+        .status-down {
+            background-color: #dc3545;
+        }
+        
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .usage-info {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .response-meta {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-top: 5px;
+            border-top: 1px solid #ddd;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+<body ng-controller="ChatController as vm">
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">
+                            <i class="fas fa-robot"></i> LLM Integration Chat Interface
+                        </h3>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div>
+                                <span class="badge bg-{{vm.healthStatus.status === 'UP' ? 'success' : 'danger'}}">
+                                    Service: {{vm.healthStatus.status}}
+                                </span>
+                                <span class="badge bg-info ms-2">
+                                    {{vm.healthStatus.availableProviders}} Providers Available
+                                </span>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" ng-click="vm.checkHealth()">
+                                <i class="fas fa-sync"></i> Refresh Status
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <!-- Provider Selection and Settings -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="provider" class="form-label">Provider:</label>
+                                <select id="provider" class="form-select" ng-model="vm.selectedProvider" ng-change="vm.onProviderChange()">
+                                    <option value="">Default Provider</option>
+                                    <option ng-repeat="provider in vm.availableProviders" value="{{provider}}">
+                                        <span class="provider-status" ng-class="vm.providerStatuses[provider] ? 'status-up' : 'status-down'"></span>
+                                        {{provider}}
+                                    </option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label for="model" class="form-label">Model (Optional):</label>
+                                <input type="text" id="model" class="form-control" ng-model="vm.settings.model" placeholder="e.g., gpt-3.5-turbo">
+                            </div>
+                            
+                            <div class="col-md-2">
+                                <label for="maxTokens" class="form-label">Max Tokens:</label>
+                                <input type="number" id="maxTokens" class="form-control" ng-model="vm.settings.maxTokens" min="1" max="4000">
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label for="temperature" class="form-label">Temperature:</label>
+                                <input type="range" id="temperature" class="form-range" ng-model="vm.settings.temperature" min="0" max="2" step="0.1">
+                                <small class="text-muted">{{vm.settings.temperature}}</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Messages -->
+                        <div class="chat-container mb-3" id="chatContainer">
+                            <div ng-if="vm.messages.length === 0" class="text-center text-muted">
+                                <p>Start a conversation with the LLM by typing a message below.</p>
+                            </div>
+                            
+                            <div ng-repeat="message in vm.messages" class="message" ng-class="{'user-message': message.role === 'user', 'assistant-message': message.role === 'assistant', 'system-message': message.role === 'system'}">
+                                <div>
+                                    <strong>{{message.role === 'user' ? 'You' : (message.role === 'assistant' ? 'Assistant' : 'System')}}:</strong>
+                                </div>
+                                <div ng-bind-html="vm.formatMessage(message.content)"></div>
+                                
+                                <!-- Response metadata for assistant messages -->
+                                <div ng-if="message.role === 'assistant' && message.metadata" class="response-meta">
+                                    <div><strong>Provider:</strong> {{message.metadata.provider}}</div>
+                                    <div ng-if="message.metadata.model"><strong>Model:</strong> {{message.metadata.model}}</div>
+                                    <div ng-if="message.metadata.usage" class="usage-info">
+                                        <strong>Token Usage:</strong> 
+                                        Prompt: {{message.metadata.usage.promptTokens}}, 
+                                        Completion: {{message.metadata.usage.completionTokens}}, 
+                                        Total: {{message.metadata.usage.totalTokens}}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Loading indicator -->
+                            <div ng-if="vm.isLoading" class="message assistant-message">
+                                <div class="d-flex align-items-center">
+                                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                    <span>Assistant is thinking...</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Message Input -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="input-group">
+                                    <textarea 
+                                        class="form-control" 
+                                        ng-model="vm.userMessage" 
+                                        placeholder="Type your message here..." 
+                                        rows="3"
+                                        ng-keydown="vm.handleKeyDown($event)"
+                                        ng-disabled="vm.isLoading"></textarea>
+                                    <button 
+                                        class="btn btn-primary" 
+                                        type="button" 
+                                        ng-click="vm.sendMessage()" 
+                                        ng-disabled="vm.isLoading || !vm.userMessage.trim()">
+                                        <i class="fas fa-paper-plane"></i> Send
+                                    </button>
+                                </div>
+                                <small class="text-muted">Press Ctrl+Enter to send</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button class="btn btn-outline-warning me-2" ng-click="vm.clearChat()" ng-disabled="vm.isLoading">
+                                    <i class="fas fa-trash"></i> Clear Chat
+                                </button>
+                                <button class="btn btn-outline-info me-2" ng-click="vm.addSystemMessage()" ng-disabled="vm.isLoading">
+                                    <i class="fas fa-cog"></i> Add System Message
+                                </button>
+                                <button class="btn btn-outline-secondary" ng-click="vm.exportChat()" ng-disabled="vm.messages.length === 0">
+                                    <i class="fas fa-download"></i> Export Chat
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Error Display -->
+                        <div ng-if="vm.error" class="alert alert-danger mt-3" role="alert">
+                            <h6 class="alert-heading">Error:</h6>
+                            <p class="mb-0">{{vm.error}}</p>
+                            <button type="button" class="btn-close" ng-click="vm.clearError()"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Font Awesome -->
+    <script src="https://kit.fontawesome.com/your-font-awesome-kit.js" crossorigin="anonymous"></script>
+    
+    <!-- App JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>
