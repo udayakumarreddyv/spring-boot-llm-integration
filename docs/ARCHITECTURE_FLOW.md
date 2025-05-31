@@ -323,8 +323,8 @@ graph TB
     end
 
     subgraph "Spring Configuration"
-        CP[@ConfigurationProperties]
-        VAL[@Validated]
+        CP[ConfigurationProperties]
+        VAL[Validated]
         BIND[Property Binding]
     end
 
